@@ -38,15 +38,21 @@ class MNISTSegmentationDataset(Dataset):
     def __len__(self):
         return len(self.mnist_dataset)
     
+    
     def __getitem__(self, idx):
         H, W = self.canvas_size
         
-        # Initialize empty canvas (1 channel, H, W) and segmentation mask (H, W)
-        # Background class is represented by 0
-        canvas = torch.zeros((1, H, W), dtype=torch.float32)
+        # Determine domain style: Source has always black background, but Target can be inverted (white canvas background)
+        is_target_inverted = (self.domain == "target" and random.random() > 0.5)
+        
+        # Initialize canvas: white background (1.0) if inverted target, black background (0.0) otherwise
+        canvas_bg_val = 1.0 if is_target_inverted else 0.0
+        canvas = torch.full((1, H, W), canvas_bg_val, dtype=torch.float32)
+        
+        # Initialize mask with zeros
         mask = torch.zeros((H, W), dtype=torch.long)
         
-        d_h, d_w = 28, 28 # Original MNIST digit size
+        d_h, d_w = 28, 28 # Original dimensions of a MNIST digit
         
         # Place random digits onto the canvas
         for _ in range(self.num_digits_per_image):
@@ -55,30 +61,37 @@ class MNISTSegmentationDataset(Dataset):
             digit_img, digit_label = self.mnist_dataset[rand_idx]
             
             # Generate random coordinates for placement
-            top = random.randint(0, H - d_h)
-            left = random.randint(0, W - d_w)
+            top = random.randint(0, H - d_h)  # Prevents exceeding the bottom border
+            left = random.randint(0, W - d_w) # Prevents exceeding the right border
             
-            # Paste the digit onto the canvas (using max to handle overlapping pixels)
-            canvas[:, top:top+d_h, left:left+d_w] = torch.maximum(
-                canvas[:, top:top+d_h, left:left+d_w], 
-                digit_img
-            )
+            # Handle digit inversion and proper canvas blending
+            if is_target_inverted:
+                # Invert digit: dark strokes on white background
+                current_digit = 1.0 - digit_img
+                
+                # Use torch.minimum to place dark digits onto white background
+                canvas[:, top:top+d_h, left:left+d_w] = torch.minimum(
+                    canvas[:, top:top+d_h, left:left+d_w], 
+                    current_digit
+                )
+            else:
+                # White digits go on a black background (standard)
+                current_digit = digit_img
+                canvas[:, top:top+d_h, left:left+d_w] = torch.maximum(
+                    canvas[:, top:top+d_h, left:left+d_w], 
+                    current_digit
+                )
             
-            # Create binary mask for the current digit
-            digit_mask = (digit_img.squeeze(dim=0) > 0.1).long()
-            
-            # Assign class labels to the segmentation mask (Label + 1, since 0 is background)
+            # Update segmentation mask with the current digit's labels
+            digit_mask = (digit_img.squeeze(0) > 0.1).long() # Binary mask obtained by thresholding
             sub_mask = mask[top:top+d_h, left:left+d_w]
-            sub_mask[digit_mask == 1] = digit_label + 1 # sub_mask is a view, so mask is already changed
+            sub_mask[digit_mask == 1] = digit_label + 1
+            # (sub_mask is a view, so mask is automatically updated)
             
-        # Apply domain-specific transformations to simulate domain shift
+        # Apply target-specific appearance shifts (e.g., Gaussian noise)
         if self.domain == "target":
-            # Domain shift: Add Gaussian noise and invert background intensities
             noise = torch.randn_like(canvas) * 0.15
             canvas = torch.clamp(canvas + noise, 0.0, 1.0)
-            
-            # Optional: Invert or shift intensity for target domain style
-            # canvas = 1.0 - canvas
             
         return canvas, mask
     
