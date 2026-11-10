@@ -23,15 +23,19 @@ class SegmentationEvaluator:
     Evaluator class for semantic segmentation tasks.
     Computes standard metrics including mIoU, F1-Score, Precision, and Recall.
     """
-    def __init__(self, num_classes: int, device: str):
+    def __init__(self, num_classes: int, device: str, ignore_index: int = 255):
         self.num_classes = num_classes
         self.device = device
+        self.ignore_index = ignore_index
+        self.is_binary = (num_classes == 2)
         
-        # Mean Metrics (IoU, F1, Precision and Recall)
-        self.miou = MulticlassJaccardIndex(num_classes=num_classes, average="macro").to(device)
-        self.f1 = MulticlassF1Score(num_classes=num_classes, average="macro").to(device)
-        self.precision = MulticlassPrecision(num_classes=num_classes, average="macro").to(device)
-        self.recall = MulticlassRecall(num_classes=num_classes, average="macro").to(device)
+        avg_mode = "none" if self.is_binary else "macro" # Average metrics for all classes if there is more than 2 classes
+        
+        # Metrics (IoU, F1, Precision and Recall)
+        self.miou = MulticlassJaccardIndex(num_classes=num_classes, ignore_index=ignore_index, average=avg_mode).to(device)
+        self.f1 = MulticlassF1Score(num_classes=num_classes, ignore_index=ignore_index, average=avg_mode).to(device)
+        self.precision = MulticlassPrecision(num_classes=num_classes, ignore_index=ignore_index, average=avg_mode).to(device)
+        self.recall = MulticlassRecall(num_classes=num_classes, ignore_index=ignore_index, average=avg_mode).to(device)
         
     def evaluate(self, model: nn.Module, val_loader) -> dict:
         """
@@ -59,12 +63,26 @@ class SegmentationEvaluator:
                 self.precision.update(preds, masks)
                 self.recall.update(preds, masks)
                 
-        # Compute and return final scalar metrics
-        return {
-            "mIoU": self.miou.compute().item(),
-            "F1-Score": self.f1.compute().item(),
-            "Precision": self.precision.compute().item(),
-            "Recall": self.recall.compute().item()
-        }
-    
+        # Compute metrics
+        miou_val = self.miou.compute()
+        f1_val = self.f1.compute()
+        precision_val = self.precision.compute()
+        recall_val = self.recall.compute()
+                
+        # Only the positive class is used when num_classes = 2
+        if self.is_binary:
+            return {
+                "mIoU": miou_val[1].item(),
+                "F1-Score": f1_val[1].item(),
+                "Precision": precision_val[1].item(),
+                "Recall": recall_val[1].item()
+            }
+        else:
+            return {
+                "mIoU": miou_val.item(),
+                "F1-Score": f1_val.item(),
+                "Precision": precision_val.item(),
+                "Recall": recall_val.item()
+            }
+
 

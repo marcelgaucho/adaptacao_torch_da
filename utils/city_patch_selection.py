@@ -99,12 +99,12 @@ def find_target_city(dataset_root: str, threshold: float = 0.01) -> tuple:
 if __name__ == "__main__":
     # Specify the dataset root path and the threshold
     DATASET_ROOT = "../CHN10-CUG"  
-    THRESHOLD = 0.01  # Threshold percentage of the pixels
+    THRESHOLD = 0.005  # Threshold percentage of the pixels
     
     print("Analyzing the dataset and computing statistics per city...")
     target_city, source_cities, df_summary = find_target_city(DATASET_ROOT, threshold=THRESHOLD)
     
-    print(f"\n--- Report of Images with >= {THRESHOLD}% Road ---")
+    print(f"\n--- Report of Images with >= {THRESHOLD*100}% Road ---")
     print(df_summary.to_string(index=False))
     
     print("\n==================================================")
@@ -115,14 +115,15 @@ if __name__ == "__main__":
     # Save the configuration to JSON for use in the training script
     config_data = {
         "target_domain": [target_city],
-        "source_domains": source_cities,
+        "source_domain": source_cities,
         "threshold_used": THRESHOLD
     }
 
-    split_file = "domain_config/cities_split.json" # file path to JSON
+    split_file = Path("domain_config/cities_split.json") # File path to JSON
+    split_file.parent.mkdir(exist_ok=True, parents=True) # Create the file folder
     with open(split_file, "w") as f:
         json.dump(config_data, f, indent=4)
 
-    print("\nConfiguration saved successfully in '{split_file}'.")
+    print(f"\nConfiguration saved successfully in '{split_file}'.")
 
 

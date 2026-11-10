@@ -30,7 +30,7 @@ class BaseTrainer(ABC):
     """
     def __init__(self, model, train_source_loader, train_target_loader, 
                  val_source_loader, val_target_loader, log_dir="runs/experiment",
-                 save_dir="checkpoints", device="cuda", num_classes=11):
+                 save_dir="checkpoints", device="cuda", num_classes=11, ignore_index=255):
         self.model = model.to(device) # model
         
         # All Loaders used by trainer classes
@@ -42,11 +42,12 @@ class BaseTrainer(ABC):
         # General config
         self.device = device
         self.num_classes = num_classes
-        self.save_dir = save_dir
-        Path(self.save_dir).mkdir(exist_ok=True, parents=True) # Create checkpoints dir
+        self.ignore_index = ignore_index
+        self.save_dir = Path(save_dir)
+        self.save_dir.mkdir(exist_ok=True, parents=True) # Create checkpoints dir
         
         # Evaluator & TensorBoard Writer
-        self.evaluator = SegmentationEvaluator(num_classes=num_classes, device=device)
+        self.evaluator = SegmentationEvaluator(num_classes=num_classes, device=device, ignore_index=ignore_index)
         self.writer = SummaryWriter(log_dir=log_dir)
 
     def log_metrics(self, metrics: dict, epoch: int, prefix: str = "val"):
@@ -60,7 +61,7 @@ class BaseTrainer(ABC):
         
     def _save_checkpoint(self, filename: str):
         """Helper method to save the model checkpoint."""
-        filepath = Path(self.save_dir) / filename
+        filepath = self.save_dir / filename
         torch.save(self.model.state_dict(), filepath)
         print(f"[*] Checkpoint saved in: {filepath}")
         

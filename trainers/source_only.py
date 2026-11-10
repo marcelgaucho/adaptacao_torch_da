@@ -29,7 +29,7 @@ class SourceOnlyTrainer(BaseTrainer):
                         val_source_loader, val_target_loader, **kwargs)
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-        self.criterion = nn.CrossEntropyLoss()       
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.ignore_index)       
         
     def train(self, num_epochs: int):
         # Loop through the epochs

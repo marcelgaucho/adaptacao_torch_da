@@ -7,6 +7,7 @@ Created on Fri Oct 30 20:03:04 2026
 
 # %% Import Libraries
 
+import json
 import glob
 import random
 from pathlib import Path
@@ -28,93 +29,101 @@ class CHN10DomainManager:
         "wuhan": "wh"        # Wuhan
     }
 
-    def __init__(self, root_dir, output_txt_dir="./data_splits"):
+    def __init__(self, root_dir, output_dir="./domain_config"):
         """
         Args:
             root_dir (str or Path): Path to the root directory of the CHN10-CUG dataset.
-            output_txt_dir (str or Path): Directory where the split .txt files will be saved.
+            output_dir (str or Path): Directory where the split .json file will be saved.
         """
         self.root_dir = Path(root_dir)
-        self.output_txt_dir = Path(output_txt_dir)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True) # Ensure output directory exists
         
-        # Create the output directory for txt splits if it does not exist
-        self.output_txt_dir.mkdir(parents=True, exist_ok=True)
-
-    def prepare_split(self, domain_name, cities, ratios=(0.7, 0.15, 0.15), seed=42):
+    def prepare_splits_json(self, domains_dict: dict, ratios=(0.7, 0.15, 0.15), seed=42, overwrite=True):
         """
-        Dynamically creates Train, Validation, and Test .txt files for a given domain using pathlib.
-        ratios: Tuple containing (train_ratio, val_ratio, test_ratio) summing up to 1.0.
+        Prepares train/val/test splits for multiple domains (e.g., source and target) 
+        and saves them cleanly into a single structured JSON file.
+        
+        domains_dict format: {"source": ["beijing", "shanghai"], "target": ["hongkong"]}
         """
         assert sum(ratios) == 1.0, "The sum of ratios must be exactly 1.0"
-
-        # Define destination paths for the 3 metadata files
-        train_txt = self.output_txt_dir / f"{domain_name}_train.txt"
-        val_txt   = self.output_txt_dir / f"{domain_name}_val.txt"
-        test_txt  = self.output_txt_dir / f"{domain_name}_test.txt"
-
-        # If all three split files already exist, skip recreation to preserve data consistency
-        if train_txt.exists() and val_txt.exists() and test_txt.exists():
-            return train_txt, val_txt, test_txt
-
-        print(f"[*] Generating splits (Train/Val/Test) for domain: {domain_name}...")
         
-        # Convert user-requested city names to their corresponding dataset acronyms
-        target_acronyms = []
-        for city in cities:
-            city_lower = city.lower().strip()
-            if city_lower in self.CITY_MAP:
-                target_acronyms.append(self.CITY_MAP[city_lower])
-            else:
-                # Fallback in case the user already provided the acronym (e.g., "am" instead of "macau")
-                if city_lower in self.CITY_MAP.values():
+        output_json_path = self.output_dir / "dataset_splits.json" # output json
+
+        # Return early if file exists and overwrite is False
+        if output_json_path.exists() and not overwrite:
+            print(f"[*] Split file already exists at {output_json_path}. Loading existing splits.")
+            with open(output_json_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        print("[*] Generating new dataset splits...")
+        all_images = list(self.root_dir.glob("**/images/*.jpg"))
+        master_splits_data = {}
+
+        for domain_name, cities in domains_dict.items():
+            # Convert city names to acronyms
+            target_acronyms = []
+            for city in cities:
+                city_lower = city.lower().strip()
+                if city_lower in self.CITY_MAP:
+                    target_acronyms.append(self.CITY_MAP[city_lower])
+                elif city_lower in self.CITY_MAP.values():
                     target_acronyms.append(city_lower)
                 else:
                     raise ValueError(f"City '{city}' is not recognized in CHN10-CUG dataset.")
 
-        # Collect all image paths. By targeting specific subfolders, we inherently exclude the 'Graph' folder.
-        # This scans across train/val/test folders but only looks inside the 'images' subdirectories.
-        all_images = list(self.root_dir.glob("**/images/*.png"))
-        
-        # Filter images based on the mapped city acronym prefixes (e.g., checking if filename starts with 'am')
-        filtered = [
-            img for img in all_images 
-            if any(img.name.lower().startswith(acronym) for acronym in target_acronyms)
-        ]
-        
-        # Stable sort to ensure reproducibility across different operating systems before shuffling
-        filtered.sort()
-        
-        # Shuffle dataset with a fixed seed to prevent data leakage in future runs
-        random.seed(seed)
-        random.shuffle(filtered)
+            # Filter images for current domain
+            filtered = [
+                img.as_posix() for img in all_images 
+                if any(img.name.lower().startswith(acronym) for acronym in target_acronyms)
+            ]
+            
+            filtered.sort()
+            random.seed(seed)
+            random.shuffle(filtered)
 
-        # Compute exact index slicing points based on user ratios
-        total_samples = len(filtered)
-        idx_train_end = int(total_samples * ratios[0])
-        idx_val_end   = idx_train_end + int(total_samples * ratios[1])
+            # Slicing splits
+            total = len(filtered)
+            idx_train = int(total * ratios[0])
+            idx_val = idx_train + int(total * ratios[1])
 
-        train_list = filtered[:idx_train_end]
-        val_list   = filtered[idx_train_end:idx_val_end]
-        test_list  = filtered[idx_val_end:]
+            master_splits_data[domain_name] = {
+                "train": filtered[:idx_train],
+                "val": filtered[idx_train:idx_val],
+                "test": filtered[idx_val:]
+            }
 
-        # Save the 3 splits as persistent files, writing paths in POSIX format (forward slashes)
-        for lst, txt_path in zip([train_list, val_list, test_list], [train_txt, val_txt, test_txt]):
-            with txt_path.open("w", encoding="utf-8") as f:
-                for item in lst: 
-                    f.write(f"{item.as_posix()}\n")
+        # Save everything into a single clean JSON file
+        with open(output_json_path, "w", encoding="utf-8") as f:
+            json.dump(master_splits_data, f, indent=4)
 
-        return train_txt, val_txt, test_txt
-
-    
+        print(f"[*] Splits successfully saved to {output_json_path}")
+        return master_splits_data
+   
 # %% Test script 
 
 if __name__ == '__main__':
-    manager = CHN10DomainManager(root_dir="./CHN10-CUG")
+    split_config_path = Path("domain_config/cities_split.json") # Path to JSON with the cities split
+    
+    if not split_config_path.exists():
+        raise FileNotFoundError(f"Configuration file not found at {split_config_path}. Run the city finder script first.") # Raise error if JSON path doesn't exists
+        
+    with open(split_config_path, "r") as f:
+        config = json.load(f) # Load saved config
+    
+    threshold_used = config.pop("threshold_used", None) # Remove key to ensure format
+    
+    source_cities = config["source_domain"]
+    target_cities = config["target_domain"] # Note: JSON salves city as a list, e.g. ["Qingdao"]
+    
+    print(f"[*] Loaded cities from {split_config_path}")
+    print(f"    - Source Cities: {source_cities}")
+    print(f"    - Target Cities: {target_cities}")
+        
+    manager = CHN10DomainManager(root_dir="../CHN10-CUG") # Instanciate domain manager
 
-    # Creating splits files
-    src_train, src_val, src_test = manager.prepare_split("source", cities=["beijing", "shanghai"])
-    tgt_train, tgt_val, tgt_test = manager.prepare_split("target", cities=["hongkong"])
-
-        
-        
-        
+    # Generate the split files using the input JSON data
+    splits = manager.prepare_splits_json(config, overwrite=True)
+    
+    print(f"Total source train images: {len(splits['source_domain']['train'])}")
+    print(f"Total target test images: {len(splits['target_domain']['test'])}")
