@@ -67,11 +67,7 @@ class CHN10SegmentationDataset(Dataset):
         gt_dir = Path(*parts[:-1])
         base_name = img_p.stem[:-4] if img_p.stem.endswith("_sat") else img_p.stem
         
-        gt_path = gt_dir / f"{base_name}_mask.png"
-        if not gt_path.exists():
-            raise FileNotFoundError(f"Ground Truth mask not found at: {gt_path}")
-        
-        return gt_path
+        return gt_dir / f"{base_name}_mask.png" # Return the respective ground truth path 
     
     def __getitem__(self, idx: int) -> dict:
         # 1. Load image and mask
@@ -81,19 +77,18 @@ class CHN10SegmentationDataset(Dataset):
         gt_path = self._get_gt_path(img_path)
         mask = Image.open(gt_path).convert("L")
         
-        # 2. Convert mask to binary array (0 or 1)
+        # 2. Convert mask to binary array (0 or 1) and image to tensor
         mask_np = (np.array(mask) > 0).astype(np.uint8) # Binary mask (0 or 1)
-        
-        # 3. Convert to Tensors using torchvision.transforms.v2 functional tools
-        image_tensor = v2.functional.to_image(image)  # Converts to CHN tensor [0, 255] uint8
-        image_tensor = v2.functional.to_dtype(image_tensor, dtype=torch.float32, scale=True)  # Normalizes to [0, 1] float32
-        
         mask_tensor = torch.tensor(mask_np, dtype=torch.long)
-        
-        # 4. Apply torchvision v2 augmentations (transforms both image and mask synchronously)
+        image_tensor = v2.functional.to_image(image)
+
+        # 3. Apply torchvision v2 augmentations (transforms both image and mask synchronously)
         if self.transform is not None:
             image_tensor, mask_tensor = self.transform(image_tensor, mask_tensor)
-            
+        
+        # 4. Normalize image to [0, 1] float32
+        image_tensor = v2.functional.to_dtype(image_tensor, dtype=torch.float32, scale=True)
+
         return {
             "image": image_tensor,
             "mask": mask_tensor,
