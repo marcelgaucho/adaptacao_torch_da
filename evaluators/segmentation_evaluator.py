@@ -50,8 +50,9 @@ class SegmentationEvaluator:
         self.recall.reset()
         
         with torch.no_grad():
-            for images, masks in val_loader:
-                images, masks = images.to(self.device), masks.to(self.device)
+            for batch in val_loader:
+                images = batch["image"].to(self.device)
+                masks = batch["mask"].to(self.device)
                 
                 # Forward pass and prediction extraction
                 outputs = model(images)
