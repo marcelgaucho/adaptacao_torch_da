@@ -37,8 +37,9 @@ class SourceOnlyTrainer(BaseTrainer):
             self.model.train() # model in train mode
             total_loss = 0.0
             
-            for images, masks in self.train_source_loader:
-                images, masks = images.to(self.device), masks.to(self.device)
+            for batch in self.train_source_loader:
+                images = batch["image"].to(self.device)
+                masks = batch["mask"].to(self.device)
                 
                 self.optimizer.zero_grad() # Zero gradients
                 outputs = self.model(images) # Model predictions

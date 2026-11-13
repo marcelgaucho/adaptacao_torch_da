@@ -56,42 +56,49 @@ class ResBlock(nn.Module):
 
 class ResUnet(nn.Module):
     """Complete ResUNet architecture."""
-    def __init__(self, in_channels=3, out_channels=1, features=[64, 128, 256, 512]):
+    def __init__(self, in_channels=3, out_channels=2, features=[64, 128, 256, 512]):
         super().__init__()
+        
+        # Validate features list length
+        if len(features) < 3:
+            raise ValueError(f"The 'features' list must have at least 3 elements to properly structure the network in initial block, encoder, bottleneck and decoder (received: {features}).")
 
-        # Initial convolution with residual connection
+        # Initial convolution block with residual connection
         self.init_conv = nn.Sequential(
-            nn.Conv2d(in_channels, features[0], kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(in_channels, features[0], kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(features[0]),
             nn.ReLU(inplace=True),
-            nn.Conv2d(features[0], features[0], kernel_size=3, padding=1, bias=False)
+            nn.Conv2d(features[0], features[0], kernel_size=3, stride=1, padding=1, bias=False)
         )
         self.init_shortcut = nn.Conv2d(in_channels, features[0], kernel_size=1, bias=False)
 
-        # Encoder
-        self.encoders = nn.ModuleList()
-        curr_channels = features[0]
-        for feature in features[1:]:
+        # Encoder (doesn't include the bottleneck)
+        self.encoders = nn.ModuleList() 
+        curr_channels = features[0] # Output channel size of the initial block
+        
+        for feature in features[1:-1]: # Build encoder blocks (default: [128, 256])
             self.encoders.append(ResBlock(curr_channels, feature, stride=2))
             curr_channels = feature
-
-        # Bottleneck
-        self.bottleneck = ResBlock(features[-1], features[-1] * 2, stride=2)
+            
+        # Bottleneck (Final Encoder Block)
+        self.bottleneck = ResBlock(features[-2], features[-1], stride=2) # default: features[-2], features[-1] = 256, 512
 
         # Decoder
         self.upconvs = nn.ModuleList()
         self.decoders = nn.ModuleList()
 
-        rev_features = features[::-1]
-        curr_channels = features[-1] * 2
+        # Loop through features in reverse order
+        curr_channels = features[-1]  # Starts at the bottleneck output channel size (default: 512)
 
-        for feature in rev_features:
+        for feature in features[-2::-1]: # Build decoder blocks (default: [256, 128, 64])
+            # Upsample and channel reduction matching the encoder level
             self.upconvs.append(
                 nn.Sequential(
-                    nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
-                    nn.Conv2d(curr_channels, feature, kernel_size=3, padding=1, bias=False)
+                    nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False), # default output: [S/4, S/2, S]
+                    nn.Conv2d(curr_channels, feature, kernel_size=3, padding=1, bias=False) # default output: [256, 128, 64]
                 )
             )
+            # Decoder block receives concatenation (feature * 2) and returns feature
             self.decoders.append(
                 ResBlock(feature * 2, feature)
             )
@@ -102,41 +109,40 @@ class ResUnet(nn.Module):
 
     def forward(self, x):
         # Initial block
-        init_out = self.init_conv(x)
-        identity = self.init_shortcut(x)
-        s0 = init_out + identity
+        s0 = self.init_conv(x) + self.init_shortcut(x)
 
         # Encoder
-        skip_connections = [s0]
+        skip_connections = [s0] # Skip connections list begins with the output of the first block
         curr = s0
         for encoder in self.encoders:
-            curr = encoder(curr)
-            skip_connections.append(curr)
+            curr = encoder(curr) # Apply encoder
+            skip_connections.append(curr) # Store skip connection
 
-        # Bottleneck
-        curr = self.bottleneck(curr)
-
+        # Bottleneck output is the deepest layer
+        bottleneck_output = self.bottleneck(curr)
+        
         # Decoder
-        skip_connections = skip_connections[::-1]
-        for i, (upconv, decoder) in enumerate(zip(self.upconvs, self.decoders)):
-            curr = upconv(curr)
-            skip = skip_connections[i]
+        curr = bottleneck_output
+        
+        for upconv, decoder, skip in zip(self.upconvs, self.decoders, reversed(skip_connections)): # Loop through the decoder
+            curr = upconv(curr) # Upsample + Conv
             
             # Size compatibility (in case of odd dimensions)
-            if curr.shape != skip.shape:
+            if curr.shape[2:] != skip.shape[2:]:
                 curr = F.interpolate(curr, size=skip.shape[2:], mode='bilinear', align_corners=False)
                 
             # Skip connection
             curr = torch.cat([curr, skip], dim=1)
             curr = decoder(curr) 
 
-        return self.final_conv(curr)       
-
+        return self.final_conv(curr)  
+    
+    
 # %% Example
 
 if __name__ == "__main__":
     # Instantiate ResUnet
-    model = ResUnet(in_channels=3, out_channels=1, features=[64, 128, 256, 512])
+    model = ResUnet(in_channels=3, out_channels=2, features=[64, 128, 256, 512])
     
     # Test example image (Batch size: 2, Channels: 3, Height/Width: 256x256)
     x = torch.randn(2, 3, 256, 256)
