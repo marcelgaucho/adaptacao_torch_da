@@ -8,6 +8,12 @@ Created on Fri Nov 13 19:34:08 2026
 
 # %% Imports
 
+# From standard modules
+import random
+
+# From numpy
+import numpy as np
+
 # From Pytorch
 import torch
 from torch.utils.data import DataLoader
@@ -17,12 +23,22 @@ from models.resunet import ResUnet
 from data.chn10_json_dataset import CHN10SegmentationDataset
 from trainers.source_only import SourceOnlyTrainer
 
+# %% Set seeds for reproducibility
+
+# For Python and NumPy
+random.seed(42)
+np.random.seed(42)
+
+# For PyTorch
+torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)
+
 # %% Main function
 
 def main():
     # 1. Experiment configurations
     json_path = "domain_config/dataset_splits.json"
-    batch_size = 4
+    batch_size = 2
     num_epochs = 20
     learning_rate = 1e-4
     num_classes = 2  # Binary segmentation (background + target)
@@ -53,8 +69,7 @@ def main():
         lr=learning_rate,
         num_classes=num_classes,
         device=device,
-        log_dir="runs/source_only_experiment",
-        save_dir="checkpoints"
+        output_dir="outputs/source_only"
     )
     
     # 6. Execute Training Loop

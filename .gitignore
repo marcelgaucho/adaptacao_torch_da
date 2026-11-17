@@ -1,3 +1,6 @@
 nao_usado/
 domain_config/
 *.pyc
+outputs/
+.vscode/
+pyrightconfig.json

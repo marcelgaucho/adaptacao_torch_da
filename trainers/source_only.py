@@ -29,7 +29,14 @@ class SourceOnlyTrainer(BaseTrainer):
                         val_source_loader, val_target_loader, **kwargs)
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=self.ignore_index)       
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
+        
+        self.config.update({
+            "trainer": "SourceOnlyTrainer",
+            "learning_rate": lr,
+            "optimizer": "Adam",
+            "criterion": "CrossEntropyLoss"
+        })
         
     def train(self, num_epochs: int):
         # Loop through the epochs
@@ -60,7 +67,7 @@ class SourceOnlyTrainer(BaseTrainer):
                 print(f"-> Source Validation mIoU: {source_metrics['mIoU']:.4f}")
                 print(f"-> Source Validation F1-Score: {source_metrics['F1-Score']:.4f}")
 
-                # Log tracked metrics to TensorBoard
+                # Log tracked metrics to TensorBoard and to local history
                 self.log_metrics(source_metrics, epoch + 1, prefix="val_source")
 
             # Evaluation on validation target set (Monitoring only)
@@ -69,10 +76,10 @@ class SourceOnlyTrainer(BaseTrainer):
                 print(f"-> Target Validation mIoU: {target_metrics['mIoU']:.4f}")
                 print(f"-> Target Validation F1-Score: {target_metrics['F1-Score']:.4f}")
 
-                # Log tracked metrics to TensorBoard
+                # Log tracked metrics to TensorBoard and to local history
                 self.log_metrics(target_metrics, epoch + 1, prefix="val_target")
 
         # Save checkpoint in the end of training
         self._save_checkpoint("source_only_final.pth")
         
-        self.close() # Close TensorBoard writer
+        self.close() # Close TensorBoard writer, save history and training plot
