@@ -15,6 +15,7 @@ from .base_trainer import BaseTrainer
 
 # From Pytorch
 import torch.optim as optim
+from torch.optim.lr_scheduler import PolynomialLR
 import torch.nn as nn
 
 # %%
@@ -35,16 +36,23 @@ class SourceOnlyTrainer(BaseTrainer):
             "trainer": "SourceOnlyTrainer",
             "learning_rate": lr,
             "optimizer": "Adam",
-            "criterion": "CrossEntropyLoss"
+            "criterion": "CrossEntropyLoss",
+            "scheduler": "PolynomialLR",
+            "power": 0.9
         })
         
     def train(self, num_epochs: int):
-        # Loop through the epochs
-        for epoch in range(num_epochs):
+        # PyTorch Polynomial LR Scheduler with standard power=0.9
+        scheduler = PolynomialLR(self.optimizer, total_iters=num_epochs, power=0.9)
+        
+        print(f"[*] Starting training for {num_epochs} epochs. Monitoring metric: val_source/{self.monitor_metric}")
+        
+        for epoch in range(num_epochs): # Train loop
+            epoch_idx = epoch + 1
             self.model.train() # model in train mode
             total_loss = 0.0
             
-            for batch in self.train_source_loader:
+            for batch in self.train_source_loader: # batch loop for the epoch
                 images = batch["image"].to(self.device)
                 masks = batch["mask"].to(self.device)
                 
@@ -57,29 +65,29 @@ class SourceOnlyTrainer(BaseTrainer):
                 total_loss += loss.item() # Loss accumulation
 
             avg_loss = total_loss / len(self.train_source_loader) # Average the loss
-            print(f"[Source-Only] Epoch [{epoch+1}/{num_epochs}] - Loss: {avg_loss:.4f}")
+            current_lr = self.optimizer.param_groups[0]['lr']
+            print(f"[Source-Only] Epoch [{epoch_idx}/{num_epochs}] - Loss: {avg_loss:.4f} - LR: {current_lr:.6f}")
 
-            self.writer.add_scalar("train/loss", avg_loss, epoch + 1) # Log training loss to TensorBoard
+            self.log_scalar("train/loss", avg_loss, epoch_idx) # Log training loss to TensorBoard
+            self.log_scalar("train/lr", current_lr, epoch_idx) # Log current learning rate to TensorBoard
 
             # Evaluation on validation source set
-            if self.val_source_loader is not None:
-                source_metrics = self.evaluator.evaluate(self.model, self.val_source_loader)
-                print(f"-> Source Validation mIoU: {source_metrics['mIoU']:.4f}")
-                print(f"-> Source Validation F1-Score: {source_metrics['F1-Score']:.4f}")
-
-                # Log tracked metrics to TensorBoard and to local history
-                self.log_metrics(source_metrics, epoch + 1, prefix="val_source")
-
+            source_metrics = self._evaluate_and_log(self.val_source_loader, prefix="val_source", epoch=epoch_idx)
+            if source_metrics:
+                self.check_and_save_best_model(source_metrics, epoch_idx) # Save checkpoint checking the monitor metric
+            
             # Evaluation on validation target set (Monitoring only)
-            if self.val_target_loader is not None:
-                target_metrics = self.evaluator.evaluate(self.model, self.val_target_loader)
-                print(f"-> Target Validation mIoU: {target_metrics['mIoU']:.4f}")
-                print(f"-> Target Validation F1-Score: {target_metrics['F1-Score']:.4f}")
+            self._evaluate_and_log(self.val_target_loader, prefix="val_target", epoch=epoch_idx)
+            
+            # Update learning rate scheduler at the end of epoch
+            scheduler.step()
 
-                # Log tracked metrics to TensorBoard and to local history
-                self.log_metrics(target_metrics, epoch + 1, prefix="val_target")
-
-        # Save checkpoint in the end of training
+        # Save checkpoint at the end of training
         self._save_checkpoint("source_only_final.pth")
+        print(f"[*] Training completed successfully! Best source {self.monitor_metric}: {self.best_metric_value:.4f}")
         
         self.close() # Close TensorBoard writer, save history and training plot
+
+
+
+        

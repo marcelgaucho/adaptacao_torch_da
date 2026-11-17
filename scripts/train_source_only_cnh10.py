@@ -38,10 +38,11 @@ torch.cuda.manual_seed_all(42)
 def main():
     # 1. Experiment configurations
     json_path = "domain_config/dataset_splits.json"
-    batch_size = 2
-    num_epochs = 20
+    batch_size = 8
+    num_epochs = 40
     learning_rate = 1e-4
     num_classes = 2  # Binary segmentation (background + target)
+    ignore_index = 255
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     print(f"[*] Starting Source-Only Training on device: {device}")
@@ -67,12 +68,15 @@ def main():
         val_source_loader=val_source_loader,
         val_target_loader=val_target_loader,
         lr=learning_rate,
-        num_classes=num_classes,
         device=device,
-        output_dir="outputs/source_only"
+        num_classes=num_classes,
+        output_dir="outputs/source_only",
+        ignore_index=ignore_index,
+        monitor_metric="F1-Score"
     )
     
     # 6. Execute Training Loop
+    print("[*] Starting Source-Only training pipeline...")
     trainer.train(num_epochs=num_epochs)
     print("[*] Source-Only training completed successfully!")
     

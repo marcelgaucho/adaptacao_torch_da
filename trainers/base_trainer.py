@@ -34,7 +34,8 @@ class BaseTrainer(ABC):
     """
     def __init__(self, model, train_source_loader, train_target_loader, 
                  val_source_loader, val_target_loader, output_dir="outputs/experiment", 
-                 device="cuda", num_classes=2, ignore_index=255):
+                 device="cuda", num_classes=2, ignore_index=255,
+                 monitor_metric="F1-Score"):
         self.model = model.to(device) # model
         
         # All Loaders used by trainer classes
@@ -47,6 +48,10 @@ class BaseTrainer(ABC):
         self.device = device
         self.num_classes = num_classes
         self.ignore_index = ignore_index
+        
+        # Checkpoint tracking configuration
+        self.monitor_metric = monitor_metric
+        self.best_metric_value = -1.0
         
         # Config per run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # run timestamp
@@ -68,6 +73,7 @@ class BaseTrainer(ABC):
         self.config = {
             "num_classes": num_classes,
             "ignore_index": ignore_index,
+            "monitor_metric": monitor_metric
         }
         
     def log_scalar(self, name: str, value: float, epoch: int):
@@ -89,6 +95,19 @@ class BaseTrainer(ABC):
         self.visualizer.plot_training_summary(self.history, metric="F1-Score", filename="summary_f1.png")
         self.writer.close()
         
+    def _evaluate_and_log(self, data_loader, prefix: str, epoch: int):
+        """Universal method to evaluate any DataLoader, print results, and log them."""
+        if data_loader is None:
+            return None # returns None if the passed Data Loader is None
+        
+        metrics = self.evaluator.evaluate(self.model, data_loader)
+
+        print(f"-> {prefix.capitalize()} mIoU: {metrics['mIoU']:.4f} | F1-Score: {metrics['F1-Score']:.4f}") # show in the Console
+        
+        self.log_metrics(metrics, epoch, prefix=prefix) # Log to TensorBoard an to history
+        
+        return metrics
+        
     def _save_checkpoint(self, filename: str):
         """Helper method to save the model checkpoint."""
         filepath = self.save_dir / filename
@@ -109,13 +128,17 @@ class BaseTrainer(ABC):
             json.dump(self.config, f, indent=4)
         print(f"[*] Experiment configuration saved in: {filepath}")
         
+    def check_and_save_best_model(self, metrics: dict, epoch: int):
+        """Centralized logic to check and save the best model checkpoint based on valid source metrics."""
+        current_metric = metrics.get(self.monitor_metric, 0.0)
+        if current_metric > self.best_metric_value:
+            self.best_metric_value = current_metric
+            self._save_checkpoint("best_model.pth")
+            print(f">>> [Checkpoint] New best model saved! ({self.monitor_metric}: {self.best_metric_value:.4f}) at epoch {epoch}")
+        
     @abstractmethod
     def train(self, num_epochs: int):
         """
         Subclasses must implement the training loop with their domain adaptation strategy.
         """
         pass
-    
-    
-
-

@@ -4,3 +4,4 @@ domain_config/
 outputs/
 .vscode/
 pyrightconfig.json
+/log_*.log
