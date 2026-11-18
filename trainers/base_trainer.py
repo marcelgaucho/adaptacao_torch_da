@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 import json
+import time
 
 # Torch imports
 import torch 
@@ -53,6 +54,9 @@ class BaseTrainer(ABC):
         self.monitor_metric = monitor_metric
         self.best_metric_value = -1.0
         
+        # Global training timer tracker
+        self.start_time = None
+        
         # Config per run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # run timestamp
         self.run_dir = Path(f"{output_dir}_{timestamp}")
@@ -76,6 +80,28 @@ class BaseTrainer(ABC):
             "monitor_metric": monitor_metric
         }
         
+    def start_timer(self):
+        """Starts the global training stopwatch."""
+        self.start_time = time.perf_counter()
+        
+    def stop_and_record_timer(self):
+        """Stops the global timer, computes total elapsed time, and appends it to the config dict."""
+        if self.start_time is None:
+            return
+            
+        total_training_time = time.perf_counter() - self.start_time
+        hours, rem = divmod(total_training_time, 3600)
+        minutes, seconds = divmod(rem, 60)
+        formatted_time = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
+        
+        # Injects timing metadata into config to be automatically saved in config.json
+        self.config.update({
+            "total_training_time_seconds": round(total_training_time, 2),
+            "total_training_time_formatted": formatted_time
+        })
+        
+        print(f"[*] Training completed successfully in {formatted_time}!")
+        
     def log_scalar(self, name: str, value: float, epoch: int):
         """Logs a single scalar to both TensorBoard and in-memory history."""
         scalar_value = float(value) # Converts to float to enable saving in JSON
@@ -88,7 +114,8 @@ class BaseTrainer(ABC):
             self.log_scalar(f"{prefix}/{key}", value, epoch)
 
     def close(self):
-        """Saves config, history, generates summary plots, and closes the TensorBoard writer."""
+        """Saves final timing, config, history, generates summary plots, and closes the TensorBoard writer."""
+        self.stop_and_record_timer()
         self._save_config()
         self._save_history()
         self.visualizer.plot_training_summary(self.history, metric="mIoU", filename="summary_miou.png")

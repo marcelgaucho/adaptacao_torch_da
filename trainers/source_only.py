@@ -8,7 +8,7 @@ Created on Thu Nov  5 14:40:40 2026
 # %% Imports
 
 # From standard modules
-...
+import time
 
 # From own modules
 from .base_trainer import BaseTrainer
@@ -47,7 +47,12 @@ class SourceOnlyTrainer(BaseTrainer):
         
         print(f"[*] Starting training for {num_epochs} epochs. Monitoring metric: val_source/{self.monitor_metric}")
         
+        # Start global training stopwatch
+        self.start_timer()
+        
         for epoch in range(num_epochs): # Train loop
+            epoch_start_time = time.perf_counter()  # Start epoch stopwatch
+        
             epoch_idx = epoch + 1
             self.model.train() # model in train mode
             total_loss = 0.0
@@ -66,10 +71,14 @@ class SourceOnlyTrainer(BaseTrainer):
 
             avg_loss = total_loss / len(self.train_source_loader) # Average the loss
             current_lr = self.optimizer.param_groups[0]['lr']
-            print(f"[Source-Only] Epoch [{epoch_idx}/{num_epochs}] - Loss: {avg_loss:.4f} - LR: {current_lr:.6f}")
+            
+            epoch_duration = time.perf_counter() - epoch_start_time # Compute epoch duration
+            
+            print(f"[Source-Only] Epoch [{epoch_idx}/{num_epochs}] - Loss: {avg_loss:.4f} - LR: {current_lr:.6f} - Time: {epoch_duration:.2f}s")
 
             self.log_scalar("train/loss", avg_loss, epoch_idx) # Log training loss to TensorBoard
             self.log_scalar("train/lr", current_lr, epoch_idx) # Log current learning rate to TensorBoard
+            self.log_scalar("train/epoch_time_sec", epoch_duration, epoch_idx)
 
             # Evaluation on validation source set
             source_metrics = self._evaluate_and_log(self.val_source_loader, prefix="val_source", epoch=epoch_idx)
