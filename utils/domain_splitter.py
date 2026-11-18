@@ -102,6 +102,26 @@ class CHN10DomainManager:
         mask_arr = np.array(mask) > 0
         return np.sum(mask_arr) / mask_arr.size
     
+    @staticmethod
+    def load_domains_from_json(json_path: str) -> dict:
+        """
+        Loads source and target domains configuration cleanly from an external JSON file.
+        """
+        path = Path(json_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Configuration file not found at: {path}")
+            
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        if "source_domain" not in data or "target_domain" not in data:
+            raise ValueError("JSON config must contain 'source_domain' and 'target_domain' keys.")
+        
+        return {
+            "source_domain": data["source_domain"],
+            "target_domain": data["target_domain"]
+        }            
+    
     def find_target_city(self, road_threshold: float = 0.005) -> tuple:
         """
         Identifies the target city based on the number of valid images 
@@ -237,20 +257,32 @@ if __name__ == '__main__':
     # 1. Instantiate the domain manager
     manager = CHN10DomainManager(root_dir=DATASET_ROOT, output_dir="./domain_config")
     
-    # 2. Automatically discover the best target city and source cities
-    print("Analyzing dataset to define the target domain...")
-    target_city, source_cities, df_summary = manager.find_target_city(road_threshold=THRESHOLD)
+    # 2. Choose the execution mode
+    # Set to False to choose the city with maximum number of valid images
+    USE_MANUAL_JSON_CONFIG = True  
     
-    print("\n--- City Viability Report ---")
-    print(df_summary.to_string(index=False))
-    
-    # 3. Prepare the domain dictionary to generate split paths
-    config_dict = {
-        "source_domain": source_cities,
-        "target_domain": [target_city]
-    }
-    
-    # 4. Create splits applying strict filtering to the source training set only
+    if USE_MANUAL_JSON_CONFIG:
+        # Setup 1: Load dict from JSON file
+        custom_json_path = "./domain_config/cities_split.json"
+        print(f"[*] Loading domain configuration from '{custom_json_path}'...")
+        config_dict = manager.load_domains_from_json(custom_json_path)
+        target_cities_list = config_dict["target_domain"]
+        source_cities_list = config_dict["source_domain"]
+    else:
+        # Setup 2: Discover automatically the target city and the source cities 
+        print("Analyzing dataset to automatically define the target domain...")
+        target_city, source_cities, df_summary = manager.find_target_city(road_threshold=THRESHOLD)
+        print("\n--- City Viability Report ---")
+        print(df_summary.to_string(index=False))
+        
+        config_dict = {
+            "source_domain": source_cities,
+            "target_domain": [target_city]
+        }
+        target_cities_list = [target_city]
+        source_cities_list = source_cities
+        
+    # 3. Create splits applying strict filtering to the source training set only
     splits = manager.prepare_splits_json(
         domains_dict=config_dict, 
         ratios=(0.7, 0.15, 0.15), 
@@ -258,20 +290,19 @@ if __name__ == '__main__':
         overwrite=True
     )
     
-    # 5. Clean and comprehensive final summary print
+    # 4. Clean and comprehensive final summary print
     print("\n" + "=" * 50)
+    
     print(" 📊 DOMAIN ADAPTATION DATASET SUMMARY")
     print("=" * 50)
     
-    print(f"\n🎯 Target Domain: {target_city}")
-    print(f"   - Train (Unlabeled/Adaptation): {len(splits['target_domain']['train'])} images")
-    print(f"   - Val (Original):               {len(splits['target_domain']['val'])} images")
-    print(f"   - Test (Original / Unfiltered):   {len(splits['target_domain']['test'])} images")
+    print(f"\n🎯 Target Domain(s): {', '.join(target_cities_list)}")
+    print(f"   - Train (Unlabeled): {len(splits['target_domain']['train'])} images")
+    print(f"   - Val (Original):    {len(splits['target_domain']['val'])} images")
     
-    print(f"\n📦 Source Domains ({len(source_cities)} cities): {', '.join(source_cities)}")
-    print(f"   - Train (Filtered >= {THRESHOLD*100}%):    {len(splits['source_domain']['train'])} images")
-    print(f"   - Val (Original):               {len(splits['source_domain']['val'])} images")
-    print(f"   - Test (Original):              {len(splits['source_domain']['test'])} images")
+    print(f"\n📦 Source Domains ({len(source_cities_list)} cities): {', '.join(source_cities_list)}")
+    print(f"   - Train (Filtered):  {len(splits['source_domain']['train'])} images")
+    print(f"   - Val (Original):    {len(splits['source_domain']['val'])} images")
     
     print("=" * 50)
 
