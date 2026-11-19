@@ -5,3 +5,5 @@ outputs/
 .vscode/
 pyrightconfig.json
 /log_*.log
+archive/
+chn10_domain_config/
