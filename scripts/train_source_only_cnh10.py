@@ -37,13 +37,17 @@ torch.cuda.manual_seed_all(42)
 
 def main():
     # 1. Experiment configurations
-    json_path = "domain_config/dataset_splits.json"
+    json_path = "chn10_domain_config/dataset_splits.json"
     batch_size = 8
     num_epochs = 40
     learning_rate = 1e-4
     num_classes = 2  # Binary segmentation (background + target)
     ignore_index = 255
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    # For debug mode
+    DEBUG = True
+    num_workers = 0 if DEBUG else 2 
     
     print(f"[*] Starting Source-Only Training on device: {device}")
     
@@ -53,9 +57,9 @@ def main():
     val_target_ds = CHN10SegmentationDataset(json_path, domain_key="target_domain", split="val")
     
     # 3. Create DataLoaders
-    train_source_loader = DataLoader(train_source_ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
-    val_source_loader = DataLoader(val_source_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
-    val_target_loader = DataLoader(val_target_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+    train_source_loader = DataLoader(train_source_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    val_source_loader = DataLoader(val_source_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    val_target_loader = DataLoader(val_target_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
     
     # 4. Initialize ResUnet Model
     model = ResUnet(in_channels=3, out_channels=num_classes, features=[64, 128, 256, 512])
