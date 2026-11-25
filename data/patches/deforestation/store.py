@@ -22,15 +22,13 @@ import numpy as np
 
 # %%
 
-
-
 class PatchStore:
-    """Grava todos os patches de um (domínio, split) em dois arrays numpy:
+    """Stores all patches of a (domain, split) into two numpy arrays:
 
-        images.npy  (N, C, S, S)   imagem T1+T2 fundida, em CHW
-        labels.npy  (N, S, S)      alvo (0, 1 ou ignore_index)
+        images.npy  (N, C, S, S)   fused T1+T2 image, in CHW
+        labels.npy  (N, S, S)      target (0, 1 or ignore_index)
 
-    A linha i do index.csv descreve o patch i dos dois arrays.
+    Row i of index.csv describes patch i of the two arrays.
     """
 
     COLUMNS = ["tile", "idx", "ymin", "xmin", "ymax", "xmax", "pos_frac"]
@@ -41,28 +39,30 @@ class PatchStore:
 
     def write(self, pipeline, samples, domain, split):
         images, labels, rows, shapes = [], [], [], {}
-        for sample in samples:
-            tp = pipeline.extract(sample)
-            shapes[sample.name] = list(tp.tile_hw)
-            images.append(tp.x.transpose(0, 3, 1, 2).astype(self.image_dtype))   # NHWC -> NCHW
+        for sample in samples: # Loop through tile samples
+            tp = pipeline.extract(sample) # Patch extraction
+            shapes[sample.name] = list(tp.tile_hw) # Respective tile shape
+            images.append(tp.x.transpose(0, 3, 1, 2).astype(self.image_dtype)) # NHWC -> NCHW
             labels.append(tp.y.astype(np.uint8))
-            for i, (ymin, xmin, ymax, xmax) in enumerate(tp.coords):
+            for i, (ymin, xmin, ymax, xmax) in enumerate(tp.coords): # Loop through patch coordinates
                 rows.append([sample.name, i, int(ymin), int(xmin), int(ymax), int(xmax),
-                             float((tp.y[i] == 1).mean())])
+                             float((tp.y[i] == 1).mean())]) # Append patch info
 
-        if not rows:
-            raise ValueError(f"{domain}/{split}: nenhum patch extraído")
+        if not rows: # empty patch list
+            raise ValueError(f"{domain}/{split}: no patch extracted")
 
-        d = self.out / domain / split
+        d = self.out / domain / split # save directory
         d.mkdir(parents=True, exist_ok=True)
         np.save(d / "images.npy", np.concatenate(images))
         np.save(d / "labels.npy", np.concatenate(labels))
-        with open(d / "index.csv", "w", newline="") as f:
+        with open(d / "index.csv", "w", newline="") as f: # Write info to csv
             writer = csv.writer(f)
             writer.writerow(self.COLUMNS)
             writer.writerows(rows)
-        (d / "tile_shapes.json").write_text(json.dumps(shapes))
-        return len(rows)
+        
+        (d / "tile_shapes.json").write_text(json.dumps(shapes)) # Write tiles shapes to json 
+
+        return len(rows) # Number of patches is returned
     
 # %%
 
