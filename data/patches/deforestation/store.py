@@ -66,35 +66,33 @@ class PatchStore:
     
 # %%
 
-@dataclass
-class DummySample:
-    name: str
-    image: np.ndarray  # (H, W, C)
-    label: np.ndarray  # (H, W)
-
-
-@dataclass
-class ExtractedTiles:
-    tile_hw: tuple[int, int]
-    x: np.ndarray       # (N, S, S, C)
-    y: np.ndarray       # (N, S, S)
-    coords: np.ndarray  # (N, 4)
-
-
-class DummyPipeline:
-    def __init__(self, extractor):
-        self.extractor = extractor
-
-    def extract(self, sample):
-        h, w, _ = sample.image.shape
-        x, coords = self.extractor(sample.image, get_coords=True)
-        # Extract matching label patches using the same extractor
-        y, _ = self.extractor(sample.label[..., None], get_coords=True)
-        return ExtractedTiles(tile_hw=(h, w), x=x, y=y[..., 0], coords=coords)
-    
-# %%
-
 if __name__ == "__main__":
+    @dataclass
+    class DummySample:
+        name: str
+        image: np.ndarray  # (H, W, C)
+        label: np.ndarray  # (H, W)
+
+
+    @dataclass
+    class ExtractedTiles:
+        tile_hw: tuple[int, int]
+        x: np.ndarray       # (N, S, S, C)
+        y: np.ndarray       # (N, S, S)
+        coords: np.ndarray  # (N, 4)
+
+
+    class DummyPipeline:
+        def __init__(self, extractor):
+            self.extractor = extractor
+
+        def extract(self, sample):
+            h, w, _ = sample.image.shape
+            x, coords = self.extractor(sample.image, get_coords=True)
+            # Extract matching label patches using the same extractor
+            y, _ = self.extractor(sample.label[..., None], get_coords=True)
+            return ExtractedTiles(tile_hw=(h, w), x=x, y=y[..., 0], coords=coords)
+
     extractor = PatchExtractor(patch_size=4, overlap_percent=0.5, padding=True)
     pipeline = DummyPipeline(extractor)
 

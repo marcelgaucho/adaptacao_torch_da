@@ -7,10 +7,14 @@ Created on Wed Apr 15 17:50:58 2026
 
 # %% Import Libraries
 
+# From standard modules
 from pathlib import Path
+import math
+
+# From other modules
 from osgeo import gdal, ogr, osr
 import numpy as np
-import math
+
 
 # %%
 
