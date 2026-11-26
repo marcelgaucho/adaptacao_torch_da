@@ -11,8 +11,8 @@ Created on Tue Nov 24 15:36:39 2026
 from osgeo import gdal, gdal_array
 import numpy as np
 from skimage import morphology
-
-
+import matplotlib.pyplot as plt; plt.ioff()
+from matplotlib.colors import ListedColormap
 
 # %%
 
@@ -40,11 +40,36 @@ class ChangeLabelBuilder:
         
         # Mark ignore_index in T2
         new_t2 = t2_eroded.copy().astype(np.uint8)
-        new_t2[t2_ignore_ring == self.target_class] = 255
-        new_t2[t1_dilated == self.target_class] = 255
+        new_t2[t2_ignore_ring == self.target_class] = self.ignore_index
+        new_t2[t1_dilated == self.target_class] = self.ignore_index
         
-        return new_t2 # or new_t2[..., np.newaxis] (H, W, 1)?
+        return new_t2[..., np.newaxis] # (H, W, 1)
     
+# %%
+
+if __name__ == "__main__":
+    lbl_t1 = np.array([
+        [0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+    ], dtype=np.uint8)
+
+    lbl_t2 = np.array([
+        [0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0],
+    ], dtype=np.uint8)
+
+    builder = ChangeLabelBuilder(target_class=1, ignore_index=255)
+    saida = builder(lbl_t1, lbl_t2, dil_px=1, ero_px=0)
+
+    print("lbl_t1:\n", lbl_t1)
+    print("\nlbl_t2:\n", lbl_t2)
+    print("\nsaida:\n", saida[:, :, 0]) # (H, W, 1) -> (H, W) -> print
 
         
 

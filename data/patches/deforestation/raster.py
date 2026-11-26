@@ -65,6 +65,36 @@ class RasterReader:
             
 # %%
 
-if __name__ == '__main__':
-    pass
-    # tile_path =  
+if __name__ == "__main__":
+    # Use forward slashes ("/vsimem/...") directly instead of Path(...) on Windows,
+    # because Path converts "/" into "\\", which GDAL does not recognize as /vsimem/.
+    base_path = "/vsimem/base_test.tif"
+    out_path = "/vsimem/output_test.tif"
+
+    # Create a simple 4x4 single-band GeoTIFF in GDAL's virtual RAM filesystem
+    driver = gdal.GetDriverByName("GTiff")
+    ds = driver.Create(base_path, xsize=4, ysize=4, bands=1, eType=gdal.GDT_Byte)
+    if ds is None:
+        raise RuntimeError("GDAL failed to create virtual GeoTIFF in /vsimem/")
+
+    ds.SetGeoTransform((10.0, 0.5, 0.0, 20.0, 0.0, -0.5))
+    ds.GetRasterBand(1).WriteArray(np.zeros((4, 4), dtype=np.uint8))
+    ds.FlushCache()
+    ds = None
+
+    # Test reading -> returns (C, H, W)
+    read_base = RasterReader.read(base_path)
+    print("read_base shape (C, H, W):", read_base.shape)
+
+    # Test export -> expects (H, W, C) array
+    array_hwc = np.arange(4 * 4 * 2, dtype=np.uint8).reshape(4, 4, 2)
+    RasterReader.export_to_geotiff(array_hwc, base_path, out_path)
+
+    read_out = RasterReader.read(out_path)
+    print("read_out shape (C, H, W):", read_out.shape)
+    print("Band 0 matches:", np.array_equal(read_out[0], array_hwc[..., 0]))
+    print("Band 1 matches:", np.array_equal(read_out[1], array_hwc[..., 1]))
+
+    # Free the virtual in-memory files from GDAL
+    gdal.Unlink(base_path)
+    gdal.Unlink(out_path)
