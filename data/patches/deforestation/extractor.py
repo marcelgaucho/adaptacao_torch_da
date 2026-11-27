@@ -32,7 +32,7 @@ class PatchExtractor:
         
         self.padding = padding
         
-    def __call__(self, array, get_coords=True):
+    def __call__(self, array, get_coords=True, pad_value=None):
         """
         array: 3D array H, W, C]
         Returns patches (N, S, S, C) and coords (with get_coords==True) (N, 4) = [ymin, xmin, ymax, xmax], relatives to the original array (can be negative with padding).
@@ -57,9 +57,13 @@ class PatchExtractor:
             # If odd, bottom and right stay with 1 more pixel
             top, left = pad_h_total // 2, pad_w_total // 2
             bottom, right = pad_h_total - top, pad_w_total - left
+            pad_width = ((top, bottom), (left, right), (0,0))
             
             # 2. Apply Symmetric Padding
-            array = np.pad(array, ((top, bottom), (left, right), (0,0)), mode='symmetric')
+            if pad_value is None: # default is symmetric padding
+                array = np.pad(array, pad_width, mode='symmetric')
+            else: # constant padding if value is passed
+                array = np.pad(array, pad_width, mode="constant", constant_values=pad_value)
             
             # Global pixel offset (relative to original top-left 0,0)
             # Starting at -top/-left because the patch window starts "outside" the original image
