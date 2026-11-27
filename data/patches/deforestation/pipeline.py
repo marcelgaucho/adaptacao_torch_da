@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from pathlib import Path
 
 # From our modules
-from .extractor import PatchExtractor
+from .extraction import PatchExtractor
 
 # From other modules
 import numpy as np

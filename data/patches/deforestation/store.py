@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import tempfile
 
 # From our modules
-from .extractor import PatchExtractor
+from .extraction import PatchExtractor
 
 # From other modules
 import numpy as np
@@ -33,16 +33,16 @@ class PatchStore:
 
     COLUMNS = ["tile", "idx", "ymin", "xmin", "ymax", "xmax", "pos_frac"]
 
-    def __init__(self, out_dir, image_dtype=np.float32):
+    def __init__(self, out_dir, img_dtype=np.uint16):
         self.out = Path(out_dir)
-        self.image_dtype = image_dtype
+        self.img_dtype = img_dtype
 
     def write(self, pipeline, samples, domain, split):
         images, labels, rows, shapes = [], [], [], {}
         for sample in samples: # Loop through tile samples
-            tp = pipeline.extract(sample) # Patch extraction
+            tp = pipeline.extract(sample) # Patch extraction from tile
             shapes[sample.name] = list(tp.tile_hw) # Respective tile shape
-            images.append(tp.x.transpose(0, 3, 1, 2).astype(self.image_dtype)) # NHWC -> NCHW
+            images.append(tp.x.transpose(0, 3, 1, 2).astype(self.img_dtype)) # NHWC -> NCHW
             labels.append(tp.y.astype(np.uint8))
             for i, (ymin, xmin, ymax, xmax) in enumerate(tp.coords): # Loop through patch coordinates
                 rows.append([sample.name, i, int(ymin), int(xmin), int(ymax), int(xmax),
@@ -61,8 +61,21 @@ class PatchStore:
             writer.writerows(rows)
         
         (d / "tile_shapes.json").write_text(json.dumps(shapes)) # Write tiles shapes to json 
+        
+        n_patches = len(rows) # number of patches
+        extractor = pipeline.extractor # patch extractor 
+        meta = {
+            "domain": domain,
+            "split": split,
+            "num_patches": n_patches,
+            "patch_size": getattr(extractor, "patch_size", None),
+            "overlap_percent": getattr(extractor, "overlap_percent", None),
+            "padding": getattr(extractor, "padding", None),
+            "img_dtype": np.dtype(self.img_dtype).name,
+        }
+        (d / "meta.json").write_text(json.dumps(meta, indent=4)) # Write other meta extraction information to json     
 
-        return len(rows) # Number of patches is returned
+        return n_patches # Number of patches is returned
     
 # %%
 

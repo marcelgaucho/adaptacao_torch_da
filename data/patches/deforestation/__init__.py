@@ -9,8 +9,6 @@ Created on Wed Nov 25 16:53:25 2026
 from .layout import DatasetLayout
 from .raster import RasterReader
 from .labels import ChangeLabelBuilder
-from .extractor import PatchExtractor
+from .extraction import PatchExtractor
 from .pipeline import FusedPatchPipeline
 from .store import PatchStore
-
-IGNORE_INDEX = 255

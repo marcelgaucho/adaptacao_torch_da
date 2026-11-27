@@ -28,8 +28,9 @@ class RasterReader:
         data = ds.ReadAsArray()
         if data.ndim == 2:
             data = np.expand_dims(data, axis=0) # GDAL (H, W) -> (1, H, W) for masks
-            
-        return data
+        
+        # GDAL (C, H, W) -> (H, W, C)
+        return np.transpose(data, (1, 2, 0))
     
     @staticmethod
     def export_to_geotiff(array, base_geotiff, out_path):

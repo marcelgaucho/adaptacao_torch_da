@@ -10,7 +10,10 @@ Created on Wed Nov 25 16:49:53 2026
 
 # From our modules
 from data.patches.deforestation import (DatasetLayout, RasterReader, ChangeLabelBuilder, PatchExtractor,
-                                        FusedPatchPipeline, PatchStore, IGNORE_INDEX)
+                                        FusedPatchPipeline, PatchStore)
+
+# From other modules
+import numpy as np
 
 # %%
 
@@ -22,9 +25,10 @@ def main():
     out_dir = 'data/deforest_patches'
     
     # Dataset parameters
-    root = r'../../deforestation_dataset/'
+    root = r'../deforestation_dataset/'
     target_class = 1
     domains = ["MA", "PA", "RO"]
+    image_dtype = np.uint16
         
     # Label parameters
     ignore_class = 255
@@ -33,7 +37,7 @@ def main():
     
     layout = DatasetLayout(root) # dataset structure
     extractor = PatchExtractor(patch_size, overlap, padding=padding) # patch extractor
-    store = PatchStore(out_dir) # manage patch and metadata saving
+    store = PatchStore(out_dir, img_dtype=image_dtype) # manage patch and metadata saving
 
     for domain in domains: # loop though domains in dataset
         for split in ["train", "valid", "test"]: # loop through the data splits
@@ -43,21 +47,11 @@ def main():
                                    ignore_index=ignore_class, 
                                    dil_px=dilation_px, 
                                    ero_px=erosion_px), 
-                extractor,
-                ignore_class) # patch extraction pipeline
+                extractor) # patch extraction pipeline
             n = store.write(pipeline, layout.samples(domain, split), domain, split) # store the patches
+            print(f"{domain}/{split}: {n} patches")
 
 # %%
 
 if __name__ == "__main__":
-    main()
-            
-
-
-
-
-
-
-
-
-    
+    main()    
